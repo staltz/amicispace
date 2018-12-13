@@ -1,6 +1,9 @@
-// const ssbKeys = require('ssb-keys');
-// const ssbConfigInject = require('ssb-config/inject');
-// const path = require('path');
+/* Copyright (C) 2018 Andre Staltz.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 const pull = require('pull-stream');
 const pify = require('pify');
 

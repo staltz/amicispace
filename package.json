@@ -1,13 +1,13 @@
 {
   "name": "amicispace",
   "version": "1.0.0",
-  "description": "",
+  "description": "Browse the social graph in Scuttlebutt",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "Andre Staltz <contact@staltz.com>",
+  "license": "MPL-2.0",
   "dependencies": {
     "pull-stream": "3.6.9",
     "scuttlebot": "13.2.1",
