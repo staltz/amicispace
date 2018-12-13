@@ -1,0 +1,163 @@
+<html>
+  <head>
+    <style>
+      #cy {
+        width: 99vw;
+        height: 99vh;
+        display: block;
+      }
+    </style>
+    <script src="http://localhost:9000/cytoscape.js"></script>
+    <script src="http://localhost:9000/cola.min.js"></script>
+    <script src="http://localhost:9000/cytoscape-cola.js"></script>
+  </head>
+  <body>
+    <div id="cy"></div>
+    <script>
+      const cyopts = {
+        container: document.getElementById('cy'), // container to render in
+        style: [
+          {
+            selector: 'node',
+            style: {'background-color': '#2a9afc', label: 'data(label)'},
+          },
+          {selector: 'edge', style: {width: 3, 'line-color': '#bedaf4'}},
+        ],
+      };
+      cytoscape.use(cytoscapeCola);
+      const cy = cytoscape(cyopts);
+
+      function centerOfBoundingBox() {
+        const bb = cy.elements().renderedBoundingBox();
+        let [x, y] = [(bb.x1 + bb.x2) * 0.5, (bb.y1 + bb.y2) * 0.5];
+        x += -20 + 40 * Math.random();
+        y += -20 + 40 * Math.random();
+        return {x, y};
+      }
+
+      async function fetchJSON(path) {
+        const res = await fetch(path);
+        return await res.json();
+      }
+
+      async function quickLayoutGraph() {
+        const quality = false; // Math.random() < 0.35 ? true : false;
+        const layout = cy.layout({
+          name: 'cola',
+          fit: false,
+          edgeLength: 150,
+          nodeDimensionsIncludeLabels: false,
+          convergenceThreshold: quality ? 0.05 : 5,
+          maxSimulationTime: quality ? 1000 : 100,
+        });
+        layout.run();
+        await layout.pon('layoutstop');
+        layout.stop();
+      }
+
+      async function finalLayoutGraph() {
+        const layout = cy.layout({
+          name: 'cola',
+          fit: false,
+          convergenceThreshold: 0.01,
+          maxSimulationTime: 20e3,
+        });
+        layout.run();
+        await layout.pon('layoutstop');
+        layout.stop();
+      }
+
+      async function* fetchIterative(path) {
+        while (true) {
+          const x = await fetchJSON(path);
+          if (x) {
+            yield x;
+          } else {
+            return;
+          }
+        }
+      }
+
+      function filter(condition) {
+        return function*(input) {
+          for (let x of input) {
+            if (condition(x)) {
+              yield x;
+            }
+          }
+        };
+      }
+
+      function take(n) {
+        return async function*(input) {
+          let i = 0;
+          if (i >= n) return;
+          for await (let x of input) {
+            yield x;
+            i += 1;
+            if (i >= n) return;
+          }
+        };
+      }
+
+      function batch(n) {
+        return async function*(input) {
+          let buffer = [];
+          for await (let arr of input) {
+            buffer = buffer.concat(arr);
+            if (buffer.length >= n) {
+              yield buffer;
+              buffer = [];
+            }
+          }
+          if (buffer.length !== 0) {
+            yield buffer;
+          }
+        };
+      }
+
+      async function* graphParts() {
+        const nodesCache = {};
+        async function cachedFetchJSON(id) {
+          if (nodesCache[id]) {
+            return [nodesCache[id], false];
+          } else {
+            const node = await fetchJSON('/node/' + encodeURIComponent(id));
+            nodesCache[id] = node;
+            return [node, true];
+          }
+        }
+        const edges = fetchIterative('/nextEdge');
+        for await (let edge of edges) {
+          const [source, target] = edge;
+          const [sourceNode, sourceIsNew] = await cachedFetchJSON(source);
+          const [targetNode, targetIsNew] = await cachedFetchJSON(target);
+          const part = [];
+          if (sourceIsNew) {
+            part.push({group: 'nodes', data: sourceNode});
+          }
+          if (targetIsNew) {
+            part.push({group: 'nodes', data: targetNode});
+          }
+          part.push({group: 'edges', data: {source, target}});
+          yield part;
+        }
+      }
+
+      async function main() {
+        const parts = batch(2)(graphParts());
+        for await (let part of parts) {
+          const nodes = filter(x => x.group === 'nodes')(part);
+          for (let node of nodes) {
+            node.position = centerOfBoundingBox();
+          }
+          cy.add(part);
+          await quickLayoutGraph();
+        }
+        await finalLayoutGraph();
+      }
+
+      main();
+    </script>
+  </body>
+</html>
